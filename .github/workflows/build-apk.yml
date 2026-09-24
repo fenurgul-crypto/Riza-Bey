@@ -63,22 +63,44 @@ jobs:
         working-directory: app
         run: flutter pub get
 
-      - name: APK derle
+      - name: Kod analizi
         working-directory: app
-        run: flutter build apk --release
+        run: flutter analyze || true
 
-      - name: APK'yı yeniden adlandır
-        run: cp app/build/app/outputs/flutter-apk/app-release.apk riza-bey.apk
+      - name: Testler
+        working-directory: app
+        run: flutter test
 
-      - name: APK'yı yükle (indirilebilir)
+      - name: İki APK'yı derle (Maps + FM)
+        run: |
+          set -e
+          MAN=app/android/app/src/main/AndroidManifest.xml
+          GRADLE=app/android/app/build.gradle.kts
+          build_one () {
+            NAME="$1"; APPID="$2"; ROLE="$3"; OUT="$4"
+            echo "==== $NAME derleniyor ($APPID, rol=$ROLE) ===="
+            sed -i "s/android:label=\"[^\"]*\"/android:label=\"$NAME\"/" "$MAN"
+            sed -i "s/applicationId = \"[^\"]*\"/applicationId = \"$APPID\"/" "$GRADLE"
+            (cd app && flutter build apk --release --dart-define=ROLE=$ROLE)
+            cp app/build/app/outputs/flutter-apk/app-release.apk "$OUT"
+          }
+          build_one "Maps" "com.rizabey.maps" "ebeveyn" "Maps.apk"
+          build_one "FM" "com.rizabey.fm" "cocuk" "FM.apk"
+          ls -la Maps.apk FM.apk
+
+      - name: APK'ları yükle (indirilebilir)
         uses: actions/upload-artifact@v4
         with:
           name: riza-bey-apk
-          path: riza-bey.apk
+          path: |
+            Maps.apk
+            FM.apk
 
       - name: Sürüm olarak yayınla
         uses: softprops/action-gh-release@v2
         with:
           tag_name: son
-          name: Rıza Bey — son sürüm
-          files: riza-bey.apk
+          name: Rıza Bey — Maps + FM
+          files: |
+            Maps.apk
+            FM.apk
