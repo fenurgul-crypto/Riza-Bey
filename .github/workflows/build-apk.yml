@@ -1,0 +1,84 @@
+name: APK Derle
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: Java kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Flutter kur
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.24.5'
+
+      - name: Android platform dosyalarını üret
+        run: |
+          flutter create --org com.rizabey --project-name riza_takip --platforms=android /tmp/scaf
+          cp -r /tmp/scaf/android app/android
+
+      - name: İzinleri ve minSdk'yı ayarla
+        run: |
+          python3 - <<'PY'
+          p = 'app/android/app/src/main/AndroidManifest.xml'
+          s = open(p, encoding='utf-8').read()
+          perms = (
+            '    <uses-permission android:name="android.permission.INTERNET"/>\n'
+            '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>\n'
+            '    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>\n'
+            '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n'
+            '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>\n'
+          )
+          if 'ACCESS_FINE_LOCATION' not in s:
+              i = s.index('>', s.index('<manifest')) + 1
+              s = s[:i] + '\n' + perms + s[i:]
+              open(p, 'w', encoding='utf-8').write(s)
+              print('izinler eklendi')
+          PY
+          for f in app/android/app/build.gradle.kts app/android/app/build.gradle; do
+            if [ -f "$f" ]; then
+              sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' "$f"
+              sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' "$f"
+            fi
+          done
+
+      - name: Paketleri indir
+        working-directory: app
+        run: flutter pub get
+
+      - name: APK derle
+        working-directory: app
+        run: flutter build apk --release
+
+      - name: APK'yı yeniden adlandır
+        run: cp app/build/app/outputs/flutter-apk/app-release.apk riza-bey.apk
+
+      - name: APK'yı yükle (indirilebilir)
+        uses: actions/upload-artifact@v4
+        with:
+          name: riza-bey-apk
+          path: riza-bey.apk
+
+      - name: Sürüm olarak yayınla
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: son
+          name: Rıza Bey — son sürüm
+          files: riza-bey.apk
